@@ -4,6 +4,7 @@ import { StorySegment, Choice } from '../types/Story';
 interface StoryState {
   currentSegment: StorySegment | null;
   storyHistory: StorySegment[];
+  storySummary: string;
   isLoading: boolean;
   error: string | null;
   downloadProgress: number;
@@ -18,6 +19,7 @@ interface StoryState {
   setError: (error: string | null) => void;
   setProgress: (progress: number, file?: string) => void;
   setONNXInitialized: (initialized: boolean) => void;
+  updateStorySummary: (newSummary: string) => void;
 }
 
 // Initial empty story segment for typing purposes
@@ -48,6 +50,7 @@ const emptySegment: StorySegment = {
 export const useStoryStore = create<StoryState>((set) => ({
   currentSegment: null,
   storyHistory: [],
+  storySummary: '',
   isLoading: false,
   error: null,
   downloadProgress: 0,
@@ -69,6 +72,7 @@ export const useStoryStore = create<StoryState>((set) => ({
     set({ 
       currentSegment: null, 
       storyHistory: [], 
+      storySummary: '',
       error: null,
       downloadProgress: 0,
       currentFile: '',
@@ -88,5 +92,8 @@ export const useStoryStore = create<StoryState>((set) => ({
     }),
 
   setONNXInitialized: (initialized: boolean) =>
-    set({ isONNXInitialized: initialized })
+    set({ isONNXInitialized: initialized }),
+    
+  updateStorySummary: (newSummary: string) =>
+    set({ storySummary: newSummary })
 })); 
