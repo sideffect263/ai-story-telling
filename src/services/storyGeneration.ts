@@ -661,7 +661,7 @@ Avoid repeating phrases from the summary.
 // Function to refresh the story's prompt and summary
 const refreshStoryPrompt = async (
   storySummary: string,
-  lastSegment: StorySegment
+  _lastSegment: StorySegment
 ): Promise<string> => {
   // Generate a completely new summary from the entire story history
   // This helps prevent drift by providing a fresh starting point

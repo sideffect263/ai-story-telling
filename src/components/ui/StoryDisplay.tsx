@@ -18,7 +18,7 @@ export const StoryDisplay: React.FC<StoryDisplayProps> = ({
   const [isComplete, setIsComplete] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [fadeIn, setFadeIn] = useState<boolean>(false);
-  const { storySummary } = useStoryStore();
+  const { storySummary, segmentsSincePromptRefresh } = useStoryStore();
   const textSpeed = 30; // milliseconds per character
   
   // Reset text display when segment changes
@@ -95,11 +95,31 @@ export const StoryDisplay: React.FC<StoryDisplayProps> = ({
             {!isComplete && <span className="animate-pulse">|</span>}
           </p>
           
-          {/* Debug summary display */}
-          {showDebug && storySummary && (
+          {/* Debug information display */}
+          {showDebug && (
             <div className="mt-4 pt-4 border-t border-gray-700">
-              <h4 className="text-xs text-gray-400 mb-1">Story Summary (Debug)</h4>
-              <p className="text-sm text-gray-300 italic">{storySummary}</p>
+              {/* Prompt refresh indicator */}
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="text-xs text-gray-400 mb-0">Story Engine Health</h4>
+                <div className="flex items-center">
+                  <span className="text-xs mr-2">Segments since refresh:</span>
+                  <span className={`text-xs font-mono px-2 py-1 rounded ${segmentsSincePromptRefresh === 0 
+                    ? 'bg-green-800 text-green-200' 
+                    : segmentsSincePromptRefresh < 3 
+                      ? 'bg-yellow-800 text-yellow-200' 
+                      : 'bg-red-800 text-red-200'}`}>
+                    {segmentsSincePromptRefresh}
+                  </span>
+                </div>
+              </div>
+              
+              {/* Story summary debug info */}
+              {storySummary && (
+                <>
+                  <h4 className="text-xs text-gray-400 mb-1">Story Summary</h4>
+                  <p className="text-sm text-gray-300 italic">{storySummary}</p>
+                </>
+              )}
             </div>
           )}
         </div>

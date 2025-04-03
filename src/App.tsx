@@ -12,6 +12,7 @@ import './styles/environment.css';
 // Local storage keys
 const STORY_SUMMARY_KEY = 'worlds_unfolding_summary';
 const DEBUG_MODE_KEY = 'worlds_unfolding_debug';
+const SEGMENTS_COUNT_KEY = 'worlds_unfolding_segments_count';
 
 // Default environment to show during loading
 const DEFAULT_ENVIRONMENT = {
@@ -39,12 +40,24 @@ const DEFAULT_METADATA = {
 };
 
 const App: React.FC = () => {
-  const { currentSegment, storyHistory, storySummary, isLoading, error, downloadProgress, currentFile, updateStorySummary } = useStoryStore();
+  const { 
+    currentSegment, 
+    storyHistory, 
+    storySummary, 
+    isLoading, 
+    error, 
+    downloadProgress, 
+    currentFile, 
+    updateStorySummary,
+    segmentsSincePromptRefresh,
+    resetSegmentCount 
+  } = useStoryStore();
   const { generateStoryStart, generateNextSegment } = useStoryGeneration();
   const [storyComplete, setStoryComplete] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [initializationStep, setInitializationStep] = useState<string>('Starting up...');
   const [debugMode, setDebugMode] = useState(false);
+  const [isPromptRefreshing, setIsPromptRefreshing] = useState(false);
 
   // Load debug mode setting
   useEffect(() => {
@@ -63,11 +76,25 @@ const App: React.FC = () => {
           return newValue;
         });
       }
+      
+      // Add keyboard shortcut for manual prompt refresh (Ctrl+Shift+R)
+      if (e.ctrlKey && e.shiftKey && e.key === 'R' && debugMode) {
+        e.preventDefault();
+        // Only allow manual refresh if we have a current segment
+        if (currentSegment) {
+          console.log('Manual prompt refresh triggered');
+          // Force a refresh by resetting the segment count to a high number
+          localStorage.setItem(SEGMENTS_COUNT_KEY, '999');
+          resetSegmentCount();
+          setIsPromptRefreshing(true);
+          setTimeout(() => setIsPromptRefreshing(false), 1500);
+        }
+      }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [debugMode, currentSegment, resetSegmentCount]);
 
   // Load saved story data from localStorage on initial mount
   useEffect(() => {
@@ -77,8 +104,19 @@ const App: React.FC = () => {
         updateStorySummary(savedSummary);
       }
       
-      // Future improvement: Load the full story state
-      // For now, we're just loading the summary
+      // Load segments count since last refresh
+      const savedSegmentsCount = localStorage.getItem(SEGMENTS_COUNT_KEY);
+      if (savedSegmentsCount) {
+        const count = parseInt(savedSegmentsCount);
+        // If we have a valid count, use it to manually set the counter
+        // This allows persistence across page refreshes
+        if (!isNaN(count)) {
+          // We'll update the counter in the store
+          for (let i = 0; i < count; i++) {
+            useStoryStore.getState().incrementSegmentCount();
+          }
+        }
+      }
     } catch (e) {
       console.warn('Failed to load story from localStorage:', e);
     }
@@ -94,6 +132,15 @@ const App: React.FC = () => {
       }
     }
   }, [storySummary]);
+  
+  // Save segments count to localStorage when it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(SEGMENTS_COUNT_KEY, segmentsSincePromptRefresh.toString());
+    } catch (e) {
+      console.warn('Failed to save segments count to localStorage:', e);
+    }
+  }, [segmentsSincePromptRefresh]);
 
   useEffect(() => {
     let mounted = true;
@@ -200,6 +247,9 @@ const App: React.FC = () => {
       {debugMode && (
         <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded z-50">
           Debug Mode Active
+          {isPromptRefreshing && (
+            <span className="ml-2 font-bold text-green-400">Prompt Refreshed!</span>
+          )}
         </div>
       )}
       
