@@ -622,6 +622,9 @@ Keep only the most important plot points and character information.
   }
 };
 
+// Constants for prompt refreshing
+const REFRESH_PROMPT_AFTER_SEGMENTS = 3; // Refresh prompt every 3 story segments
+
 // Build prompt using summary and last paragraph
 const buildPrompt = (summary: string, lastParagraph: string, setting: string): string => `
 Genre: Fantasy
@@ -633,6 +636,60 @@ ${lastParagraph}
 
 Write a brief continuation of this fantasy story in 2-3 sentences. Be vivid but concise.
 `;
+
+// Build a fresh prompt from scratch to prevent model drift
+const buildFreshPrompt = (
+  summary: string, 
+  lastParagraph: string, 
+  setting: string, 
+  metadata: { mood: string, timeOfDay: string, weatherConditions: string }
+): string => `
+RESET CONTEXT
+Genre: Fantasy Adventure
+Setting: A ${metadata.mood} ${setting} during ${metadata.timeOfDay}, ${metadata.weatherConditions} conditions
+
+Complete Story Summary: ${summary}
+
+Most Recent Scene:
+${lastParagraph}
+
+Write a fresh, focused continuation of this fantasy story in 2-3 sentences.
+Be vivid but concise. Match the established mood and setting.
+Avoid repeating phrases from the summary.
+`;
+
+// Function to refresh the story's prompt and summary
+const refreshStoryPrompt = async (
+  storySummary: string,
+  lastSegment: StorySegment
+): Promise<string> => {
+  // Generate a completely new summary from the entire story history
+  // This helps prevent drift by providing a fresh starting point
+  const newSummaryPrompt = `
+Create a fresh, concise summary (3 sentences max) of this fantasy story:
+
+${storySummary}
+
+Focus only on the most important plot points and character development.
+Capture the essence of the story without using repetitive language.
+`;
+
+  try {
+    // Generate the refreshed summary
+    const refreshedSummary = await generateText(newSummaryPrompt);
+    
+    // Update the store with the refreshed summary
+    useStoryStore.getState().updateStorySummary(refreshedSummary);
+    useStoryStore.getState().resetSegmentCount();
+    
+    console.log('Prompt refreshed with new summary:', refreshedSummary);
+    return refreshedSummary;
+  } catch (error) {
+    console.error('Error refreshing story prompt:', error);
+    // If refresh fails, just return the original summary
+    return storySummary;
+  }
+};
 
 // Function to generate the initial story using the LLM
 export const generateInitialStory = async (): Promise<StorySegment> => {
@@ -734,25 +791,48 @@ export const generateNextStorySegment = async (
   console.log('Generating next story segment with LLM...');
   
   try {
-    // Get the current summary from the store
-    const { storySummary } = useStoryStore.getState();
+    // Get the current summary and segment count from the store
+    const { storySummary, segmentsSincePromptRefresh } = useStoryStore.getState();
+    
+    // Increment the segment count
+    useStoryStore.getState().incrementSegmentCount();
+    
+    // Determine if we need to refresh the prompt
+    const shouldRefreshPrompt = segmentsSincePromptRefresh >= REFRESH_PROMPT_AFTER_SEGMENTS;
+    let workingSummary = storySummary;
+    
+    // If it's time to refresh the prompt, generate a fresh summary
+    if (shouldRefreshPrompt) {
+      console.log('Refreshing story prompt after', segmentsSincePromptRefresh, 'segments');
+      workingSummary = await refreshStoryPrompt(storySummary, currentStory);
+    }
     
     // Generate the continuation using the summary and last paragraph
     const lastParagraph = currentStory.text.split(".").slice(-2).join(".").trim();
     const nextText = `${choice.consequence} `;
     
-    const storyPrompt = buildPrompt(
-      storySummary,
-      lastParagraph,
-      currentStory.environment.baseEnvironment
-    );
+    // Use either the standard prompt or the fresh prompt based on whether we're refreshing
+    const storyPrompt = shouldRefreshPrompt 
+      ? buildFreshPrompt(
+          workingSummary,
+          lastParagraph,
+          currentStory.environment.baseEnvironment,
+          currentStory.metadata
+        )
+      : buildPrompt(
+          workingSummary,
+          lastParagraph,
+          currentStory.environment.baseEnvironment
+        );
     
     const generatedText = await generateText(storyPrompt);
     const fullNewText = nextText + generatedText;
     
-    // Update the summary with the new content
-    const updatedSummary = await generateSummary(fullNewText, storySummary);
-    useStoryStore.getState().updateStorySummary(updatedSummary);
+    // Update the summary with the new content (only if we didn't just refresh it)
+    if (!shouldRefreshPrompt) {
+      const updatedSummary = await generateSummary(fullNewText, workingSummary);
+      useStoryStore.getState().updateStorySummary(updatedSummary);
+    }
     
     // Determine the next environment
     let nextEnvironment = currentStory.environment.baseEnvironment;

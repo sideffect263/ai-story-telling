@@ -10,6 +10,7 @@ interface StoryState {
   downloadProgress: number;
   currentFile: string;
   isONNXInitialized: boolean;
+  segmentsSincePromptRefresh: number;
   
   // Actions
   setCurrentSegment: (segment: StorySegment) => void;
@@ -20,6 +21,8 @@ interface StoryState {
   setProgress: (progress: number, file?: string) => void;
   setONNXInitialized: (initialized: boolean) => void;
   updateStorySummary: (newSummary: string) => void;
+  incrementSegmentCount: () => void;
+  resetSegmentCount: () => void;
 }
 
 
@@ -32,6 +35,7 @@ export const useStoryStore = create<StoryState>((set) => ({
   downloadProgress: 0,
   currentFile: '',
   isONNXInitialized: false,
+  segmentsSincePromptRefresh: 0,
 
   setCurrentSegment: (segment: StorySegment) => 
     set(state => ({ 
@@ -52,7 +56,8 @@ export const useStoryStore = create<StoryState>((set) => ({
       error: null,
       downloadProgress: 0,
       currentFile: '',
-      isONNXInitialized: false
+      isONNXInitialized: false,
+      segmentsSincePromptRefresh: 0
     }),
 
   setLoading: (loading: boolean) => 
@@ -71,5 +76,13 @@ export const useStoryStore = create<StoryState>((set) => ({
     set({ isONNXInitialized: initialized }),
     
   updateStorySummary: (newSummary: string) =>
-    set({ storySummary: newSummary })
+    set({ storySummary: newSummary }),
+    
+  incrementSegmentCount: () =>
+    set(state => ({
+      segmentsSincePromptRefresh: state.segmentsSincePromptRefresh + 1
+    })),
+    
+  resetSegmentCount: () =>
+    set({ segmentsSincePromptRefresh: 0 })
 })); 
