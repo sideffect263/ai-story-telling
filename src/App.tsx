@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { BasicEnvironment } from './components/BasicEnvironment';
 import { StoryDisplay } from './components/ui/StoryDisplay';
 import { ChoiceInterface } from './components/ui/ChoiceInterface';
@@ -39,6 +39,105 @@ const DEFAULT_METADATA = {
   weatherConditions: 'clear'
 };
 
+// Background animation objects for ambience during loading/generation
+const BackgroundAnimation = ({ isActive }: { isActive: boolean }) => {
+  const frameRef = useRef<number>(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const particlesRef = useRef<any[]>([]);
+  
+  // Initialize particle system
+  useEffect(() => {
+    if (!isActive || !canvasRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Resize canvas to match window size
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    
+    // Create initial particles
+    const createParticles = () => {
+      const particleCount = Math.min(50, Math.floor(window.innerWidth * window.innerHeight / 15000));
+      const newParticles = [];
+      
+      for (let i = 0; i < particleCount; i++) {
+        newParticles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          radius: Math.random() * 2 + 1,
+          color: `rgba(255, 255, 255, ${Math.random() * 0.3 + 0.1})`,
+          speedX: Math.random() * 0.5 - 0.25,
+          speedY: Math.random() * 0.5 - 0.25,
+          life: Math.random() * 100 + 50
+        });
+      }
+      
+      particlesRef.current = newParticles;
+    };
+    
+    // Animation loop
+    const animate = () => {
+      if (!isActive || !ctx || !canvas) return;
+      
+      // Clear canvas with semi-transparent black to create trailing effect
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Update and draw particles
+      particlesRef.current.forEach(p => {
+        // Draw particle
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+        
+        // Update position
+        p.x += p.speedX;
+        p.y += p.speedY;
+        p.life -= 1;
+        
+        // Check bounds
+        if (p.x < 0 || p.x > canvas.width) p.speedX *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.speedY *= -1;
+        
+        // Respawn if life is depleted
+        if (p.life <= 0) {
+          p.x = Math.random() * canvas.width;
+          p.y = Math.random() * canvas.height;
+          p.radius = Math.random() * 2 + 1;
+          p.life = Math.random() * 100 + 50;
+        }
+      });
+      
+      frameRef.current = requestAnimationFrame(animate);
+    };
+    
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    createParticles();
+    frameRef.current = requestAnimationFrame(animate);
+    
+    return () => {
+      cancelAnimationFrame(frameRef.current);
+      window.removeEventListener('resize', resizeCanvas);
+    };
+  }, [isActive]);
+  
+  if (!isActive) return null;
+  
+  return (
+    <canvas 
+      ref={canvasRef}
+      className="absolute inset-0 z-0 bg-transparent"
+      style={{ pointerEvents: 'none' }}
+    />
+  );
+};
+
 const App: React.FC = () => {
   const { 
     currentSegment, 
@@ -58,6 +157,9 @@ const App: React.FC = () => {
   const [initializationStep, setInitializationStep] = useState<string>('Starting up...');
   const [debugMode, setDebugMode] = useState(false);
   const [isPromptRefreshing, setIsPromptRefreshing] = useState(false);
+
+  // Track whether an animation is needed (during loading or text generation)
+  const isGenerating = isLoading || (downloadProgress > 0 && downloadProgress < 100);
 
   // Load debug mode setting
   useEffect(() => {
@@ -234,6 +336,9 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen relative overflow-hidden">
+      {/* Background animation during loading/generation */}
+      <BackgroundAnimation isActive={isGenerating} />
+      
       {/* Basic Environment - always shown regardless of loading state */}
       <div className="absolute inset-0 z-0">
         <BasicEnvironment 
@@ -241,6 +346,34 @@ const App: React.FC = () => {
           metadata={metadataToShow}
           previousMetadata={previousSegment?.metadata}
         />
+      </div>
+      
+      {/* Response time notification */}
+      <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-40 max-w-md w-full rounded-lg overflow-hidden shadow-lg"
+      style={{ position: 'absolute', top: '1vh', left: '50%', transform: 'translateX(-50%)' }}
+      >
+        <div className="bg-black bg-opacity-75 border border-gray-700 px-4 py-3">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 text-yellow-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style={{ width: '40px', aspectRatio: '1/1' }}>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <p className="font-medium text-white">Current response times: 10-30 seconds</p>
+          </div>
+        </div>
+      </div>
+      
+      {/* App explanation */}
+      <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40 max-w-lg w-full rounded-lg overflow-hidden shadow-lg"
+      style={{ position: 'absolute', top: '70vh', left: '50%', transform: 'translateX(-50%)' }}
+      >
+        <div className="bg-black bg-opacity-75 border border-gray-700 px-4 py-3">
+          <h3 className="text-white font-semibold mb-2 text-center">About This Experience</h3>
+          <p className="text-gray-200 text-sm leading-relaxed">
+            This web app is a work in progress. I'm experimenting with loading an LLM 
+            such as DistilGPT2 to generate interactive fiction. The story is generated 
+            in the background while you wait, and unfolds in real-time as you make choices.
+          </p>
+        </div>
       </div>
       
       {/* Debug mode indicator */}
@@ -271,7 +404,7 @@ const App: React.FC = () => {
       
       {/* UI overlay - shown when story is loaded */}
       {currentSegment && (
-        <div className="absolute inset-x-0 bottom-0 z-10 p-6" style={{ position: 'absolute', top: '20vh'}}>
+        <div className="absolute inset-x-0 bottom-0 z-10 p-6" style={{ position: 'absolute', top: '20vh', left: '50%', transform: 'translateX(-50%)' }}>
           <div className="max-w-2xl mx-auto">
             <StoryDisplay 
               segment={currentSegment}
