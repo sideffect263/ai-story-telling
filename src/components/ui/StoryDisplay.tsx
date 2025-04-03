@@ -1,20 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { StorySegment } from '../../types/Story';
 import { Spinner } from './Spinner';
+import { useStoryStore } from '../../store/storyState';
 
 interface StoryDisplayProps {
   segment: StorySegment;
   onComplete?: () => void;
+  showDebug?: boolean;
 }
 
 export const StoryDisplay: React.FC<StoryDisplayProps> = ({ 
   segment, 
-  onComplete 
+  onComplete,
+  showDebug = false
 }) => {
   const [displayText, setDisplayText] = useState<string>('');
   const [isComplete, setIsComplete] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [fadeIn, setFadeIn] = useState<boolean>(false);
+  const { storySummary } = useStoryStore();
   const textSpeed = 30; // milliseconds per character
   
   // Reset text display when segment changes
@@ -90,6 +94,14 @@ export const StoryDisplay: React.FC<StoryDisplayProps> = ({
             {displayText}
             {!isComplete && <span className="animate-pulse">|</span>}
           </p>
+          
+          {/* Debug summary display */}
+          {showDebug && storySummary && (
+            <div className="mt-4 pt-4 border-t border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-1">Story Summary (Debug)</h4>
+              <p className="text-sm text-gray-300 italic">{storySummary}</p>
+            </div>
+          )}
         </div>
       )}
     </div>

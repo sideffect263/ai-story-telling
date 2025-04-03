@@ -22,30 +22,6 @@ interface StoryState {
   updateStorySummary: (newSummary: string) => void;
 }
 
-// Initial empty story segment for typing purposes
-const emptySegment: StorySegment = {
-  text: '',
-  environment: {
-    baseEnvironment: 'default',
-    lighting: {
-      intensity: 1,
-      color: '#ffffff',
-      ambient: 0.5,
-      shadows: true
-    },
-    atmosphere: {
-      fog: false
-    },
-    props: []
-  },
-  choices: [],
-  metadata: {
-    mood: 'neutral',
-    location: 'unknown',
-    timeOfDay: 'day',
-    weatherConditions: 'clear'
-  }
-};
 
 export const useStoryStore = create<StoryState>((set) => ({
   currentSegment: null,
@@ -63,8 +39,8 @@ export const useStoryStore = create<StoryState>((set) => ({
       storyHistory: [...state.storyHistory, segment]
     })),
 
-  makeChoice: (choice: Choice) => 
-    set(state => ({ 
+  makeChoice: (_: Choice) => 
+    set(_ => ({ 
       isLoading: true 
     })),
 

@@ -1,5 +1,5 @@
 // Import types only, we'll dynamically import the actual modules
-import type { TextGenerationPipeline, PreTrainedTokenizer } from '@xenova/transformers';
+import type { TextGenerationPipeline } from '@xenova/transformers';
 import { StorySegment, Choice } from '../types/Story';
 import { useStoryStore } from '../store/storyState';
 
@@ -32,12 +32,10 @@ function isGenerationArray(result: any): result is TextGenerationOutput {
 
 // Initialize components
 let generator: TextGenerationPipeline | null = null;
-let tokenizer: PreTrainedTokenizer | null = null;
 let isInitializing = false;
 let transformers: any = null;
 
 const MODEL_NAME = 'Xenova/distilgpt2';
-const MODEL_CACHE_KEY = 'model_cache_v1';
 
 // Add a delay utility function
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -117,7 +115,7 @@ const initializeComponents = async () => {
 
     console.log('Loading tokenizer...');
     try {
-      tokenizer = await transformers.AutoTokenizer.from_pretrained(MODEL_NAME, {
+      await transformers.AutoTokenizer.from_pretrained(MODEL_NAME, {
         progress_callback: handleProgress,
         quantized: false,
         fetch: (url: string, init?: RequestInit) => {
@@ -143,25 +141,7 @@ const initializeComponents = async () => {
 
     console.log('Loading model...');
     try {
-      const model = await transformers.AutoModelForCausalLM.from_pretrained(MODEL_NAME, {
-        progress_callback: handleProgress,
-        quantized: false,
-        fetch: (url: string, init?: RequestInit) => {
-          console.log('Fetching model file:', url);
-          return fetch(url, {
-            ...init,
-            headers: {
-              ...init?.headers,
-              'User-Agent': 'Mozilla/5.0'
-            }
-          }).then(async (response) => {
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response;
-          });
-        }
-      });
+     
       
       return true;
     } catch (error) {
@@ -217,7 +197,6 @@ const initializeGenerator = async () => {
     console.error('Failed to initialize model:', error);
     isInitializing = false;
     generator = null;
-    tokenizer = null;
     throw new Error(`Failed to initialize model: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
@@ -617,6 +596,44 @@ const baseEnvironments = {
   }
 };
 
+// Add utility function to generate summaries
+const generateSummary = async (text: string, previousSummary: string = ""): Promise<string> => {
+  try {
+    const summaryPrompt = `
+Summarize this story in a single concise paragraph (max 3 sentences):
+
+Previous summary: ${previousSummary}
+
+New content: ${text}
+
+Keep only the most important plot points and character information.
+`;
+
+    // Generate a summary with the LLM
+    const summary = await generateText(summaryPrompt);
+    return summary.trim();
+  } catch (error) {
+    console.error("Failed to generate summary:", error);
+    // If there's an error, return a simple concatenation
+    const simpleSummary = previousSummary ? 
+      `${previousSummary} Then, ${text.split('.')[0]}.` : 
+      text.split('.')[0] + ".";
+    return simpleSummary.substring(0, 200); // Limit length
+  }
+};
+
+// Build prompt using summary and last paragraph
+const buildPrompt = (summary: string, lastParagraph: string, setting: string): string => `
+Genre: Fantasy
+Setting: ${setting}
+Story summary: ${summary}
+
+Last scene:
+${lastParagraph}
+
+Write a brief continuation of this fantasy story in 2-3 sentences. Be vivid but concise.
+`;
+
 // Function to generate the initial story using the LLM
 export const generateInitialStory = async (): Promise<StorySegment> => {
   console.log('Generating initial story with LLM...');
@@ -626,11 +643,17 @@ export const generateInitialStory = async (): Promise<StorySegment> => {
     const environment = baseEnvironments.forest;
     
     // Generate story text with LLM - improved prompt
-    const prompt = "Write a brief, one-paragraph introduction to a fantasy adventure where the protagonist finds themselves in a mysterious forest. Focus only on the immediate scene and sensations. End with a description of the forest. Keep it under 4 sentences.";
+    const prompt = "Write a brief, one-line introduction to a fantasy adventure";
     const generatedText = await generateText(prompt);
     
+    // Generate initial summary
+    const summary = await generateSummary(generatedText);
+    
+    // Update store with the summary
+    useStoryStore.getState().updateStorySummary(summary);
+    
     // Generate choices with LLM - simplified prompt for better JSON output
-    const choicesPrompt = `Answer with ONLY a JSON array and nothing else. Create two choices for a forest adventure.
+    const choicesPrompt = `Answer with ONLY a JSON array and nothing else. Create two choices for a  adventure.
 
 RESPOND WITH ONLY THIS JSON FORMAT:
 [{"text":"First choice text","consequence":"First choice result"},{"text":"Second choice text","consequence":"Second choice result"}]
@@ -656,8 +679,14 @@ Keep each text and consequence under 10 words.`;
     console.error('Failed to generate initial story:', error);
     
     // Fallback to a predefined story if LLM generation fails
+    const fallbackText = baseEnvironments.forest.defaultDescription;
+    
+    // Generate initial summary for fallback
+    const summary = await generateSummary(fallbackText).catch(() => "A protagonist finds themselves in a mysterious forest.");
+    useStoryStore.getState().updateStorySummary(summary);
+    
     return {
-      text: baseEnvironments.forest.defaultDescription,
+      text: fallbackText,
       environment: {
         baseEnvironment: 'forest',
         lighting: baseEnvironments.forest.lighting,
@@ -705,14 +734,25 @@ export const generateNextStorySegment = async (
   console.log('Generating next story segment with LLM...');
   
   try {
-    // Generate the continuation of the story based on the choice - improved prompt
-    const storyPrompt = `Write a brief continuation of this fantasy story in 2-3 sentences:
-Setting: ${currentStory.environment.baseEnvironment}
-The protagonist just chose to: "${choice.text}"
-This leads to: "${choice.consequence}"
-Describe only what happens immediately next. Be vivid but concise.`;
+    // Get the current summary from the store
+    const { storySummary } = useStoryStore.getState();
+    
+    // Generate the continuation using the summary and last paragraph
+    const lastParagraph = currentStory.text.split(".").slice(-2).join(".").trim();
+    const nextText = `${choice.consequence} `;
+    
+    const storyPrompt = buildPrompt(
+      storySummary,
+      lastParagraph,
+      currentStory.environment.baseEnvironment
+    );
     
     const generatedText = await generateText(storyPrompt);
+    const fullNewText = nextText + generatedText;
+    
+    // Update the summary with the new content
+    const updatedSummary = await generateSummary(fullNewText, storySummary);
+    useStoryStore.getState().updateStorySummary(updatedSummary);
     
     // Determine the next environment
     let nextEnvironment = currentStory.environment.baseEnvironment;
@@ -740,7 +780,7 @@ Keep each text and consequence under 10 words.`;
     const newChoices = parseChoicesFromText(choicesText);
     
     return {
-      text: `${choice.consequence} ${generatedText}`,
+      text: fullNewText,
       environment: {
         baseEnvironment: nextEnvironment,
         lighting: {
@@ -763,8 +803,10 @@ Keep each text and consequence under 10 words.`;
     console.error('Failed to generate next story segment:', error);
     
     // Fallback to a simpler story segment if LLM generation fails
+    const fallbackText = `${choice.consequence} As you continue your journey, new paths reveal themselves.`;
+    
     return {
-      text: `${choice.consequence} As you continue your journey, new paths reveal themselves.`,
+      text: fallbackText,
       environment: {
         ...currentStory.environment,
         baseEnvironment: currentStory.environment.baseEnvironment,

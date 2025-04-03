@@ -9,6 +9,10 @@ import { Choice } from './types/Story';
 import { initializeONNX } from './services/storyGeneration';
 import './styles/environment.css';
 
+// Local storage keys
+const STORY_SUMMARY_KEY = 'worlds_unfolding_summary';
+const DEBUG_MODE_KEY = 'worlds_unfolding_debug';
+
 // Default environment to show during loading
 const DEFAULT_ENVIRONMENT = {
   baseEnvironment: 'forest',
@@ -35,11 +39,61 @@ const DEFAULT_METADATA = {
 };
 
 const App: React.FC = () => {
-  const { currentSegment, storyHistory, isLoading, error, downloadProgress, currentFile } = useStoryStore();
+  const { currentSegment, storyHistory, storySummary, isLoading, error, downloadProgress, currentFile, updateStorySummary } = useStoryStore();
   const { generateStoryStart, generateNextSegment } = useStoryGeneration();
   const [storyComplete, setStoryComplete] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [initializationStep, setInitializationStep] = useState<string>('Starting up...');
+  const [debugMode, setDebugMode] = useState(false);
+
+  // Load debug mode setting
+  useEffect(() => {
+    const savedDebugMode = localStorage.getItem(DEBUG_MODE_KEY);
+    if (savedDebugMode === 'true') {
+      setDebugMode(true);
+    }
+    
+    // Add keyboard shortcut for debug mode toggle (Ctrl+Shift+D)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        setDebugMode(prev => {
+          const newValue = !prev;
+          localStorage.setItem(DEBUG_MODE_KEY, String(newValue));
+          return newValue;
+        });
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Load saved story data from localStorage on initial mount
+  useEffect(() => {
+    try {
+      const savedSummary = localStorage.getItem(STORY_SUMMARY_KEY);
+      if (savedSummary) {
+        updateStorySummary(savedSummary);
+      }
+      
+      // Future improvement: Load the full story state
+      // For now, we're just loading the summary
+    } catch (e) {
+      console.warn('Failed to load story from localStorage:', e);
+    }
+  }, [updateStorySummary]);
+  
+  // Save story summary to localStorage when it changes
+  useEffect(() => {
+    if (storySummary) {
+      try {
+        localStorage.setItem(STORY_SUMMARY_KEY, storySummary);
+      } catch (e) {
+        console.warn('Failed to save story summary to localStorage:', e);
+      }
+    }
+  }, [storySummary]);
 
   useEffect(() => {
     let mounted = true;
@@ -142,6 +196,13 @@ const App: React.FC = () => {
         />
       </div>
       
+      {/* Debug mode indicator */}
+      {debugMode && (
+        <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded z-50">
+          Debug Mode Active
+        </div>
+      )}
+      
       {/* Loading overlay - shown during initialization or loading */}
       {(isInitializing || isLoading || error) && (
         <LoadingIndicator
@@ -165,6 +226,7 @@ const App: React.FC = () => {
             <StoryDisplay 
               segment={currentSegment}
               onComplete={() => setStoryComplete(true)}
+              showDebug={debugMode}
             />
             
             <ChoiceInterface 

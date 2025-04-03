@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { EnvironmentDescription } from '../types/Environment';
 import { StoryMetadata } from '../types/Story';
-import { AnimationEffect } from '../types/Environment';
 
 interface BasicEnvironmentProps {
   environmentDescription: EnvironmentDescription;
@@ -88,23 +87,6 @@ export const BasicEnvironment: React.FC<BasicEnvironmentProps> = ({
       return () => clearTimeout(timer);
     }
   }, [metadata, previousMetadata, environmentDescription]);
-  
-  // Method to apply animation effect from choice
-  const applyAnimationEffect = (animationEffect?: AnimationEffect) => {
-    if (!animationEffect) return;
-    
-    if (animationEffect.transitionType) {
-      setTransitionType(animationEffect.transitionType);
-    }
-    
-    if (animationEffect.intensity) {
-      setAnimationIntensity(animationEffect.intensity);
-    }
-    
-    if (animationEffect.duration) {
-      setAnimationDuration(animationEffect.duration);
-    }
-  };
   
   // Get environment colors based on metadata
   const getEnvironmentStyle = () => {

@@ -110,7 +110,7 @@ export const Scene2D: React.FC<Scene2DProps> = ({
     });
     
     // Apply mood/lighting overlay
-    applyMoodOverlay(ctx, canvas.width, canvas.height, meta.mood, env.lighting);
+    applyMoodOverlay(ctx, canvas.width, canvas.height, meta.mood);
   };
   
   const drawBackground = (ctx: CanvasRenderingContext2D, width: number, height: number, meta: StoryMetadata) => {
@@ -612,8 +612,7 @@ export const Scene2D: React.FC<Scene2DProps> = ({
     ctx: CanvasRenderingContext2D, 
     width: number, 
     height: number, 
-    mood: string,
-    lighting: any
+    mood: string
   ) => {
     let overlayColor = 'rgba(0, 0, 0, 0)';
     let opacity = 0.2;
